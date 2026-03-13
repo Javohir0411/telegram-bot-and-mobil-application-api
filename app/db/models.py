@@ -52,11 +52,16 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
-    telegram_id = Column(BigInteger, nullable=False, index=True)
 
+    telegram_id = Column(BigInteger, nullable=True, index=True)
     user_fullname = Column(String, nullable=False)
     user_phone_number = Column(String, nullable=False)
     selected_language = Column(String, nullable=False)
+
+    password_hash = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=True, default=True)
+    is_phone_verified = Column(Boolean, nullable=True, default=False)
+
     tenant = relationship("Tenant", back_populates="users")
     rents = relationship("Rent", back_populates="user")
 

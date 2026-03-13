@@ -1,19 +1,28 @@
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql import select
+
 from app.db.models import Product
+from app.db.schemas import ProductCreate
 
 
-# - - - - - - - - - Products - - - - - - - - -
-
-
-async def get_products_service(db: AsyncSession):
-    result = await db.execute(select(Product))
+async def get_products_service(db: AsyncSession, tenant_id: int):
+    result = await db.execute(
+        select(Product).where(Product.tenant_id == tenant_id)
+    )
     return result.scalars().all()
 
 
-async def get_product_by_id_service(db: AsyncSession, product_id: int):
-    result = await db.execute(
-        select(Product)
-        .where(Product.id == product_id)
+async def create_product_service(
+    db: AsyncSession,
+    product_data: ProductCreate,
+    tenant_id: int,
+):
+    new_product = Product(
+        **product_data.model_dump(),
+        tenant_id=tenant_id,
     )
-    return result.scalars().first()
+
+    db.add(new_product)
+    await db.commit()
+    await db.refresh(new_product)
+    return new_product
