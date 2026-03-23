@@ -1,9 +1,20 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Product
+from app.core.security import hash_password
+from app.db.models import Product, User
 from app.db.schemas import ProductCreate
 
+async def create_user(db: AsyncSession, user_data):
+    new_user = User(
+        user_fullname=user_data.user_fullname,
+        user_phone_number=user_data.user_phone_number,
+        password=hash_password(user_data.password)  # eng muhumi shu
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 async def get_products_service(db: AsyncSession, tenant_id: int):
     result = await db.execute(
