@@ -20,6 +20,10 @@ class UserResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    user_phone_number: str
+    password_hash: str
+
+class LoginResponse(BaseModel):
     token: str
     token_type: str
 
@@ -35,7 +39,7 @@ class ProductCreate(BaseModel):
 
 class ProductResponse(BaseModel):
     id: int
-    tenant_id: int
+    user_id: int
     product_type: ProductTypeEnum
     product_size: Optional[ProductSizeEnum] = None
     total_quantity: int
@@ -43,3 +47,5 @@ class ProductResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+

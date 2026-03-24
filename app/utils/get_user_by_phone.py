@@ -7,11 +7,6 @@ from app.db.schemas import UserBaseModel
 
 
 async def get_user_by_phone(db: AsyncSession, user: UserBaseModel):
-    result = await db.execute(
-        select(User).where(User.user_phone_number == user.user_phone_number)
-    )
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="User topilmadi")
-    return user
+    stmt = select(User).where(User.user_phone_number == user.user_phone_number)
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()

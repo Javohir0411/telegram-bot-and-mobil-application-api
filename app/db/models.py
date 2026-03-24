@@ -51,7 +51,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True, index=True)
 
     telegram_id = Column(BigInteger, nullable=True, index=True)
     user_fullname = Column(String, nullable=False)
@@ -77,7 +77,7 @@ class Renter(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=True, index=True)
 
     renter_fullname = Column(String, nullable=False)
     renter_phone_number = Column(String, nullable=False)
@@ -90,11 +90,11 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         # ✅ tenant ichida bir xil type+size 2 marta yozilmasin
-        UniqueConstraint("tenant_id", "product_type", "product_size", name="uq_product_tenant_type_size"),
+        UniqueConstraint("user_id", "product_type", "product_size", name="uq_product_tenant_type_size"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     product_type = Column(Enum(ProductTypeEnum, name="product_type_enum"), nullable=False)
     product_size = Column(Enum(ProductSizeEnum, name="product_size_enum"), nullable=True)
@@ -109,7 +109,7 @@ class Rent(Base):
     __tablename__ = "rents"
 
     id = Column(Integer, primary_key=True, index=True)
-    tenant_id = Column(Integer, nullable=False, index=True)
+    tenant_id = Column(Integer, nullable=True, index=True)
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     renter_id = Column(Integer, ForeignKey("renter.id"), nullable=False)
