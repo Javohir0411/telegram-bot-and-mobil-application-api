@@ -4,9 +4,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from app.core.security import hash_password
-from app.db.models import Product, User
-from app.db.schemas import ProductCreate
+from app.db.models import Product, User, Renter, Rent
+from app.db.schemas import ProductCreate, RenterCreate, RenterUpdate
 from app.utils.get_product_by_id import product_by_id
+from app.utils.get_renters import get_renters_service, get_renter_by_id_service
 
 
 # ---------- USER CRUD ------------------
@@ -80,7 +81,7 @@ async def update_product(db: AsyncSession, product_id: int, update_data, current
     if product.user_id != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can't update a book"
+            detail="You can't update this product"
         )
     if update_data.product_type is not None:
         product.product_type = update_data.product_type
@@ -119,3 +120,107 @@ async def delete_product(db: AsyncSession, product_id: int, user_id: int):
     await db.delete(product)
     await db.commit()
     return product
+
+
+# -----------RENTERS CRUD -----------------
+
+# __________ RENTER Read All _________________
+
+async def get_renters(db: AsyncSession, user_id: int):
+    renters = await get_renters_service(db, user_id)
+    if renters is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Sizning ijarachilaringiz topilmadi"
+        )
+    return renters
+
+
+# __________ RENTER Read by id _________________
+
+async def get_renters_by_id(db: AsyncSession, renter_id: int, user_id: int):
+    renter = await get_renter_by_id_service(db, renter_id)
+    if renter is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bu id raqamga ega ijarachi topilmadi"
+        )
+    if renter.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu id raqam egasi ma'lumotlari siz uchun emas ! "
+        )
+    return renter
+
+
+# __________ RENTER Create _________________
+
+async def create_renter(db: AsyncSession, renter_data: RenterCreate, user_id: int):
+    new_renter = Renter(
+        **renter_data.model_dump(),
+        user_id=user_id
+    )
+    db.add(new_renter)
+    await db.commit()
+    await db.refresh(new_renter)
+    return new_renter
+
+
+# __________ RENTER Create _________________
+
+async def update_renter(
+        db: AsyncSession, renter_id: int, renter_data: RenterUpdate, user_id: int
+):
+    renter = await get_renter_by_id_service(db, renter_id)
+    if not renter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bu id raqamga ega ijarachi topilmadi"
+        )
+    if renter.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Siz bu ijarachi ma'lumotlarini yangilay olmaysiz"
+        )
+    if renter_data.renter_fullname is not None:
+        renter.renter_fullname = renter_data.renter_fullname
+
+    if renter_data.renter_phone_number is not None:
+        renter.renter_phone_number = renter_data.renter_phone_number
+
+    if renter_data.renter_passport_info is not None:
+        renter.renter_passport_info = renter_data.renter_passport_info
+    await db.commit()
+    await db.refresh(renter)
+
+    return renter
+
+
+# __________ RENTER Delete _________________
+
+async def delete_renter(db: AsyncSession, renter_id: int, user_id: int):
+    renter = await get_renter_by_id_service(db, renter_id)
+    if not renter:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Siz kiritgan id bo'yicha ijarachi topilmadi"
+        )
+
+    if renter.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bu ID egasini ma'lumotlarini o'chira olmaysiz"
+        )
+        # 🔥 RENT BOR-YO‘QLIGINI TEKSHIRAMIZ (to‘g‘ri yo‘l)
+    stmt = select(Rent).where(Rent.renter_id == renter_id)
+    result = await db.execute(stmt)
+
+    if result.scalars().first():
+        renter.renter_is_active = False
+        await db.commit()
+        return {"message": "Renter deactivated"}
+
+    await db.delete(renter)
+    await db.commit()
+    return renter
+

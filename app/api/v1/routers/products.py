@@ -7,7 +7,7 @@ from app.db.models import User
 from app.db.schemas import ProductCreate, ProductResponse
 from app.db.crud import get_products, create_product, get_product_by_id, update_product, delete_product
 
-product_router = APIRouter(prefix="/products", tags=["products"])
+product_router = APIRouter(prefix="/products", tags=["Products"])
 
 
 @product_router.get("", response_model=list[ProductResponse])
@@ -28,7 +28,7 @@ async def read_product_by_id(
 
 
 @product_router.post("", response_model=ProductResponse)
-async def create_product(
+async def add_product(
         product: ProductCreate,
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),

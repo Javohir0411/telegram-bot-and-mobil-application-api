@@ -61,6 +61,8 @@ class User(Base):
     password_hash = Column(String, nullable=True)
     is_active = Column(Boolean, nullable=True, default=True)
     is_phone_verified = Column(Boolean, nullable=True, default=False)
+    warehouse_latitude = Column(Float, nullable=True)
+    warehouse_longitude = Column(Float, nullable=True)
 
     tenant = relationship("Tenant", back_populates="users")
     rents = relationship("Rent", back_populates="user")
@@ -77,11 +79,13 @@ class Renter(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     tenant_id = Column(Integer, nullable=True, index=True)
 
     renter_fullname = Column(String, nullable=False)
     renter_phone_number = Column(String, nullable=False)
     renter_passport_info = Column(String, nullable=True)
+    renter_is_active = Column(Boolean, nullable=True, default=True)
 
     rents = relationship("Rent", back_populates="renter")
 
@@ -94,7 +98,7 @@ class Product(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     product_type = Column(Enum(ProductTypeEnum, name="product_type_enum"), nullable=False)
     product_size = Column(Enum(ProductSizeEnum, name="product_size_enum"), nullable=True)
