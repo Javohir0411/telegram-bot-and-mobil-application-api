@@ -22,6 +22,11 @@ class UserResponse(BaseModel):
     user_phone_number: str
 
 
+class UserUpdate(BaseModel):
+    user_fullname: str
+    user_phone_number: str
+
+
 class LoginRequest(BaseModel):
     user_phone_number: str
     password_hash: str
@@ -103,9 +108,6 @@ class RentBase(BaseModel):
 
     comment: str
 
-    status: PaymentStatusEnum
-    rent_status: RentStatusEnum
-
 
 class RentCreate(RentBase):
     pass
@@ -113,18 +115,26 @@ class RentCreate(RentBase):
 
 class RentUpdate(BaseModel):
     quantity: int | None = None
-    returned_quantity: int | None = None
+    start_date: date | None = None
     end_date: date | None = None
 
     delivery_needed: bool | None = None
     delivery_price: float | None = None
 
     rent_price: float | None = None
-
     comment: str | None = None
 
-    status: PaymentStatusEnum | None = None
-    rent_status: RentStatusEnum | None = None
+
+class RentReturnUpdate(BaseModel):
+    returned_quantity: int
+
+
+class RentStatusUpdate(BaseModel):
+    rent_status: RentStatusEnum
+
+
+class PaymentUpdate(BaseModel):
+    status: PaymentStatusEnum
 
 
 class RentResponse(RentBase):

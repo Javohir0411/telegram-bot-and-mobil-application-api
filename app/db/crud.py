@@ -1,13 +1,33 @@
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.security import hash_password
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-
-from app.core.security import hash_password
-from app.db.models import Product, User, Renter, Rent
-from app.db.schemas import ProductCreate, RenterCreate, RenterUpdate
+from app.db.models import (
+    Product,
+    User,
+    Renter,
+    Rent
+)
+from app.db.schemas import (
+    ProductCreate,
+    RenterCreate,
+    RenterUpdate,
+    RentCreate,
+    RentUpdate
+)
+from app.utils.enums import PaymentStatusEnum, RentStatusEnum
 from app.utils.get_product_by_id import product_by_id
-from app.utils.get_renters import get_renters_service, get_renter_by_id_service
+from app.utils.get_renters import (
+    get_renters_service,
+    get_renter_by_id_service
+)
+
+
+# ----------   USER CRUD   ---------------
+# ----------  PRODUCT CRUD ---------------
+# ----------  RENTERS CRUD ---------------
+# ----------   RENTS CRUD  ---------------
 
 
 # ---------- USER CRUD ------------------
@@ -166,7 +186,7 @@ async def create_renter(db: AsyncSession, renter_data: RenterCreate, user_id: in
     return new_renter
 
 
-# __________ RENTER Create _________________
+# __________ RENTER Update _________________
 
 async def update_renter(
         db: AsyncSession, renter_id: int, renter_data: RenterUpdate, user_id: int
@@ -218,9 +238,143 @@ async def delete_renter(db: AsyncSession, renter_id: int, user_id: int):
     if result.scalars().first():
         renter.renter_is_active = False
         await db.commit()
-        return {"message": "Renter deactivated"}
+        # return {"message": "Renter deactivated"}
 
     await db.delete(renter)
     await db.commit()
     return renter
 
+
+# -----------RENTS CRUD -----------------
+
+# __________ RENT Read All _________________
+
+async def get_rents(db: AsyncSession, user_id: int):
+    result = await db.execute(
+        select(Rent).where(User.id == user_id)
+    )
+    rent = result.scalars().all()
+    if not rent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ijaralar topilmadi !"
+        )
+    return rent
+
+
+# __________ RENT Read By ID _________________
+
+async def get_rent_by_id(db: AsyncSession, rent_id: int, user_id: int):
+    result = await db.execute(
+        select(Rent).where(
+            Rent.id == rent_id,
+            Rent.user_id == user_id,
+        )
+    )
+    rent = result.scalars().first()
+    if not rent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Kiritilgan ID uchun ijara topilmadi !"
+        )
+
+
+# __________ RENT Create _________________
+
+async def create_rent(
+        db: AsyncSession,
+        rent_data: RentCreate,
+        user_id: int
+):
+    if rent_data.quantity <= 0:
+        raise HTTPException(400, "Quantity must be > 0")
+
+    if rent_data.end_date and rent_data.end_date < rent_data.start_date:
+        raise HTTPException(400, "Invalid date range")
+
+    if rent_data.delivery_needed and not rent_data.delivery_price:
+        raise HTTPException(400, "Delivery price required")
+
+    new_rent = Rent(
+        **rent_data.model_dump(),
+        user_id=user_id,
+        returned_quantity=0,
+        status=PaymentStatusEnum.not_paid,
+        rent_status=RentStatusEnum.active,
+    )
+
+    db.add(new_rent)
+    await db.commit()
+    await db.refresh(new_rent)
+
+    return new_rent
+
+
+# __________ RENT Update _________________
+
+async def update_rent(
+        db: AsyncSession, rent_id: int, rent_data: RentUpdate, user_id: int
+):
+    result = await db.execute(
+        select(Rent).where(Rent.id == rent_id, Rent.user_id == user_id)
+    )
+    rent = result.scalars().first()
+    if not rent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ijara topilmadi !"
+        )
+    update_data = rent_data.model_dump(exclude_unset=True)
+
+    allowed_fields = {
+        "quantity",
+        "returned_quantity",
+        "start_date",
+        "end_date",
+        "latitude",
+        "longitude",
+        "delivery_needed",
+        "delivery_price",
+        "product_price",
+        "rent_price",
+        "comment",
+        "rent_status",
+    }
+
+    for key, value in update_data.items():
+        if key in allowed_fields:
+            setattr(rent, key, value)
+
+    if rent.returned_quantity > rent.quantity:
+        raise HTTPException(
+            status_code=400,
+            detail="Returned quantity cannot exceed quantity"
+        )
+
+    await db.commit()
+    await db.refresh(rent)
+
+    return rent
+
+
+# __________ RENT Delete _________________
+
+async def delete_rent(
+        db: AsyncSession,
+        rent_id: int,
+        user_id: int,
+):
+    result = await db.execute(
+        select(Rent).where(
+            Rent.id == rent_id,
+            Rent.user_id == user_id,
+        )
+    )
+    rent = result.scalars().first()
+
+    if not rent:
+        raise HTTPException(status_code=404, detail="Rent not found")
+
+    await db.delete(rent)
+    await db.commit()
+    return rent
