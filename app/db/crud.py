@@ -231,7 +231,6 @@ async def delete_renter(db: AsyncSession, renter_id: int, user_id: int):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bu ID egasini ma'lumotlarini o'chira olmaysiz"
         )
-        # 🔥 RENT BOR-YO‘QLIGINI TEKSHIRAMIZ (to‘g‘ri yo‘l)
     stmt = select(Rent).where(Rent.renter_id == renter_id)
     result = await db.execute(stmt)
 
@@ -282,32 +281,47 @@ async def get_rent_by_id(db: AsyncSession, rent_id: int, user_id: int):
 # __________ RENT Create _________________
 
 async def create_rent(
-        db: AsyncSession,
-        rent_data: RentCreate,
-        user_id: int
+        db: AsyncSession, rent_data: RentCreate, user_id: int
 ):
-    if rent_data.quantity <= 0:
-        raise HTTPException(400, "Quantity must be > 0")
-
-    if rent_data.end_date and rent_data.end_date < rent_data.start_date:
-        raise HTTPException(400, "Invalid date range")
-
-    if rent_data.delivery_needed and not rent_data.delivery_price:
-        raise HTTPException(400, "Delivery price required")
-
-    new_rent = Rent(
-        **rent_data.model_dump(),
-        user_id=user_id,
-        returned_quantity=0,
-        status=PaymentStatusEnum.not_paid,
-        rent_status=RentStatusEnum.active,
+    result = await db.execute(
+        select(Product).where(Product.id == rent_data.product_id)
     )
+    product = result.scalars().first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ijaraga bermoqchi bo'lgan mahsulotingiz bazadan topilmadi !"
+        )
+    if rent_data.quantity <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ijaraga beriladigan mahsulot miqdori 0 dan ko'p bo'lishi kerak"
+        )
+    if rent_data.quantity > product.total_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kiritilgan miqdor bazadagi umumiy miqdordan oshib ketti"
+        )
+    if rent_data.end_date and rent_data.end_date < rent_data.start_date:
+        raise HTTPException(400, "Tugash sana boshlanish sa")
 
-    db.add(new_rent)
-    await db.commit()
-    await db.refresh(new_rent)
+    renter_result = await db.execute(
+        select(Renter).where(
+            Renter.renter_fullname == rent_data.renter_fullname,
+            Renter.renter_phone_number == rent_data.renter_fullname,
 
-    return new_rent
+        )
+    )
+    renter = renter_result.scalars().first()
+    if not renter:
+        renter = Renter(
+            user_id=user_id,
+            renter_fullname=rent_data.renter_fullname,
+            renter_phone_number=rent_data.renter_fullname,
+            renter_passport_info=rent_data.renter_passport_info,
+        )
+        db.add(renter)
+        await db.flush()
 
 
 # __________ RENT Update _________________

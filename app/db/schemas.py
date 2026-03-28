@@ -109,8 +109,27 @@ class RentBase(BaseModel):
     comment: str
 
 
-class RentCreate(RentBase):
-    pass
+class RentCreate(BaseModel):
+    # product
+    product_id: int
+    quantity: int
+
+    # renter
+    renter_fullname: str
+    renter_phone_number: str
+    renter_passport_info: str | None = None
+
+    # rent info
+    start_date: date
+    end_date: date | None = None
+
+    latitude: float | None = None
+    longitude: float | None = None
+
+    delivery_needed: bool = False
+    delivery_price: float | None = None
+
+    comment: str
 
 
 class RentUpdate(BaseModel):
