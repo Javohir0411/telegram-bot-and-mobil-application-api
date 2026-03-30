@@ -124,6 +124,7 @@ class Rent(Base):
 
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=True)
+    returned_at = Column(Date, nullable=True)
 
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)

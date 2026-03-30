@@ -45,6 +45,11 @@ class ProductCreate(BaseModel):
     total_quantity: int
     price_per_day: Optional[float] = None
 
+class ProductUpdate(BaseModel):
+    product_type: ProductTypeEnum | None = None
+    product_size: Optional[ProductSizeEnum] | None = None
+    total_quantity: int | None = None
+    price_per_day: Optional[float] | None = None
 
 class ProductResponse(BaseModel):
     id: int
@@ -159,9 +164,5 @@ class PaymentUpdate(BaseModel):
 class RentResponse(RentBase):
     id: int
     user_id: int
-
-    product: ProductResponse
-    renter: RenterResponse
-
-    class Config:
-        from_attributes = True  # (Pydantic v2)
+    product_id: int
+    renter_id: int

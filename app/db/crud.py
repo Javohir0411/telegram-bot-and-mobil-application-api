@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from starlette import status
 from app.db.models import (
     Product,
@@ -14,7 +14,7 @@ from app.db.schemas import (
     RenterCreate,
     RenterUpdate,
     RentCreate,
-    RentUpdate
+    RentUpdate, RentResponse, ProductResponse, RenterResponse
 )
 from app.utils.enums import PaymentStatusEnum, RentStatusEnum
 from app.utils.get_product_by_id import product_by_id
@@ -67,7 +67,13 @@ async def get_product_by_id(db: AsyncSession, product_id: int, user_id: int):
             Product.user_id == user_id
         )
     )
-    return result.scalars().first()
+    product = result.scalars().first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mahsulot topilmadi"
+        )
+    return product
 
 
 # __________ PRODUCT Create ________________
@@ -96,12 +102,12 @@ async def update_product(db: AsyncSession, product_id: int, update_data, current
     if not product:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Book not found"
+            detail="Mahsulot topilmadi"
         )
     if product.user_id != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can't update this product"
+            detail="Siz bu mahsulotni yangilay olmaysiz"
         )
     if update_data.product_type is not None:
         product.product_type = update_data.product_type
@@ -250,7 +256,7 @@ async def delete_renter(db: AsyncSession, renter_id: int, user_id: int):
 
 async def get_rents(db: AsyncSession, user_id: int):
     result = await db.execute(
-        select(Rent).where(User.id == user_id)
+        select(Rent).where(Rent.id == user_id)
     )
     rent = result.scalars().all()
     if not rent:
@@ -276,6 +282,7 @@ async def get_rent_by_id(db: AsyncSession, rent_id: int, user_id: int):
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Kiritilgan ID uchun ijara topilmadi !"
         )
+    return rent
 
 
 # __________ RENT Create _________________
@@ -292,24 +299,33 @@ async def create_rent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ijaraga bermoqchi bo'lgan mahsulotingiz bazadan topilmadi !"
         )
-    if rent_data.quantity <= 0:
+    if rent_data.quantity <= 0:  # ijaraga berilayotgan miqdor 0 dan baland bo'lsa
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Ijaraga beriladigan mahsulot miqdori 0 dan ko'p bo'lishi kerak"
         )
-    if rent_data.quantity > product.total_quantity:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Kiritilgan miqdor bazadagi umumiy miqdordan oshib ketti"
+    result = await db.execute(
+        select(func.coalesce(func.sum(Rent.quantity - Rent.returned_quantity), 0))
+        .where(
+            Rent.product_id == product.id,
+            Rent.rent_status == RentStatusEnum.active
         )
-    if rent_data.end_date and rent_data.end_date < rent_data.start_date:
+    )
+
+    used_quantity = result.scalar()
+    print(f"USED QUANTITY: {used_quantity}")
+    available = product.total_quantity - used_quantity
+    print(f"AVAILABLE: {available}")
+
+    if rent_data.quantity > available:
+        raise HTTPException(400, "Yetarli mahsulot mavjud emas")
+    if rent_data.end_date and rent_data.end_date < rent_data.start_date:  # end date bo'lsa va start date-dan katta bo'lsa
         raise HTTPException(400, "Tugash sana boshlanish sa")
 
     renter_result = await db.execute(
         select(Renter).where(
-            Renter.renter_fullname == rent_data.renter_fullname,
-            Renter.renter_phone_number == rent_data.renter_fullname,
-
+            Renter.renter_phone_number == rent_data.renter_phone_number,
+            Renter.user_id == user_id,
         )
     )
     renter = renter_result.scalars().first()
@@ -317,17 +333,84 @@ async def create_rent(
         renter = Renter(
             user_id=user_id,
             renter_fullname=rent_data.renter_fullname,
-            renter_phone_number=rent_data.renter_fullname,
+            renter_phone_number=rent_data.renter_phone_number,
             renter_passport_info=rent_data.renter_passport_info,
         )
         db.add(renter)
-        await db.flush()
+        await db.flush()  # renterni saqlab, id raqamini olish
+
+    rent_price = None
+
+    if rent_data.end_date:
+        days = (rent_data.end_date - rent_data.start_date).days or 1  # ijara kunini olish yoki 1 kun
+        rent_price = (product.price_per_day or 0) * rent_data.quantity * days  # ijara narxini olish
+        # 🔹 RENT
+    rent = Rent(
+        user_id=user_id,
+        renter_id=renter.id,
+        product_id=product.id,
+
+        quantity=rent_data.quantity,
+        returned_quantity=0,
+
+        start_date=rent_data.start_date,
+        end_date=rent_data.end_date,
+
+        latitude=rent_data.latitude,
+        longitude=rent_data.longitude,
+
+        delivery_needed=rent_data.delivery_needed,
+        delivery_price=rent_data.delivery_price if rent_data.delivery_needed else None,
+
+        product_price=product.price_per_day,
+        rent_price=rent_price,
+
+        comment=rent_data.comment,
+
+        status=PaymentStatusEnum.not_paid,
+        rent_status=RentStatusEnum.active,
+    )
+
+    db.add(rent)
+
+    await db.commit()
+    await db.refresh(rent)
+
+    # Async-safe response uchun
+    product_result = await db.execute(select(Product).where(Product.id == rent.product_id))
+    product = product_result.scalars().first()
+
+    renter_result = await db.execute(select(Renter).where(Renter.id == rent.renter_id))
+    renter = renter_result.scalars().first()
+
+    product_response = ProductResponse.model_validate(product)
+    renter_response = RenterResponse.model_validate(renter)
+
+    return RentResponse(
+        id=rent.id,
+        user_id=rent.user_id,
+        renter_id=rent.renter_id,  # 🔹 qo‘shildi
+        product_id=rent.product_id,  # 🔹 qo‘shildi
+        product=product_response,
+        renter=renter_response,
+        quantity=rent.quantity,
+        returned_quantity=rent.returned_quantity,
+        start_date=rent.start_date,
+        end_date=rent.end_date,
+        latitude=rent.latitude,
+        longitude=rent.longitude,
+        delivery_needed=rent.delivery_needed,
+        delivery_price=rent.delivery_price,
+        product_price=rent.product_price,
+        rent_price=rent.rent_price,
+        comment=rent.comment,
+    )
 
 
 # __________ RENT Update _________________
 
 async def update_rent(
-        db: AsyncSession, rent_id: int, rent_data: RentUpdate, user_id: int
+        db: AsyncSession, rent_data: int, rent_id: RentUpdate, user_id: int
 ):
     result = await db.execute(
         select(Rent).where(Rent.id == rent_id, Rent.user_id == user_id)
